@@ -138,6 +138,7 @@ module Tot
       # }
       system([ENV['EDITOR'],tmpfile].join(' '))
       new_todo['text'] = File.readlines(tmpfile).join
+      print new_todo['text']
       TodoManager.add_todo new_todo
     end
 

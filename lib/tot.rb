@@ -32,7 +32,7 @@ module Tot
     def load_file
       todo_path = Config.todo_path
       File.open(todo_path,'w'){|file| YAML.dump([],file)} unless File.exists? todo_path
-      @tasks = YAML.load_file(todo_path)
+      @tasks = YAML.load_file(todo_path).sort_by{|i| i['date']}
     end
 
     def dump
@@ -41,16 +41,7 @@ module Tot
       File.open(Config.todo_path,'w'){|file| YAML.dump(@tasks, file)}
     end
 
-    def each
-      @tasks = load_file.sort_by{|i| i['date']}
-      @tasks.each do |todo|
-        yield todo
-      end
-      self
-    end
-
     def add(new_todo)
-      @tasks = load_file
       @tasks.push new_todo
       dump
     end
@@ -61,8 +52,20 @@ module Tot
       dump
     end
 
+    def each
+      @tasks = load_file
+      @tasks.each do |todo|
+        yield todo
+      end
+      self
+    end
+
     def delete_at(at)
       @tasks.delete_at at
+    end
+
+    def find_all!(&block)
+      @tasks = self.find_all(&block)
     end
     def print_color(with_index = false) #{{{
       @tasks.each_with_index do |todo,idx|
@@ -153,13 +156,12 @@ module Tot
     desc 'list' , 'list up your todo'
     method_option :tag, :type => :array
     def list
-      @todo_manager.each do |todo|
-        unless options[:tag].nil?
+      if options['tag']
+        @todo_manager.find_all! do |todo|
           options[:tag].all?{|i| todo['tag'].include? i}
-        else
-          true
         end
-      end.print_color(false)
+      end
+      @todo_manager.print_color(false)
     end
 
     desc 'add' , 'add a task'
@@ -176,6 +178,7 @@ module Tot
       system([ENV['EDITOR'],tmpfile].join(' '))
       new_todo['text'] = File.readlines(tmpfile).join
       print new_todo['text']
+      File.delete tmpfile
       @todo_manager.add new_todo
     end
 
@@ -208,8 +211,40 @@ EOF
     end
 
     desc 'edit TITLE', 'edit a task'
-    method_options :text => :boolean, :title => :boolean, :date => :title
-    def edit
+    method_options :text => :boolean, :title => :boolean, :date => :boolean, :tag => :boolean
+    def edit(title)
+      reg = Regexp.new(title,Regexp::IGNORECASE)
+      todos = @todo_manager.find_all{|item| reg.match(item['title'])}
+      if todos.size == 0
+        puts 'No matched task.'
+      elsif todos.size > 1
+        puts todos.size.to_s + ' tasks matched.'
+      else
+        todo = todos[0]
+        old_title = todo['title']
+        if options['title']
+          todo['title'] = Readline.readline('New Title> ').chomp('\n')
+        elsif options['date']
+          todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+        elsif options['tag']
+          todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
+                          .chomp('\n').split(' ')
+        else
+          tmpfile = "/tmp/tot.markdown"
+          File.open(tmpfile,'w'){|file| file.write todo['text']}
+          system([ENV['EDITOR'],tmpfile].join(' '))
+          todo['text'] = File.readlines(tmpfile).join
+          File.delete tmpfile
+        end
+
+        puts 'Title: ' + todo['title']
+        puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
+        puts 'Tags:  ' + todo['tag'].to_s
+        puts
+        print todo['text']
+        @todo_manager.delete_at(@todo_manager.find_index{|obj| obj['title'] == old_title})
+        @todo_manager.add todo
+      end
       
     end
   end

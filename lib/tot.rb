@@ -67,6 +67,8 @@ module Tot
         ret = today + 1
       when /^(明後日|あさって)/
         ret = today + 2
+      when /^しあさって/
+        ret = today + 3
       when /^(日|月|火|水|木|金|土)曜(日)?/
         # 次の○曜日
         date_offset = ([ '日', '月', '火', '水', '木', '金', '土' ].index($1) - today.wday + 7) % 7

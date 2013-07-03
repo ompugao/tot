@@ -1,3 +1,5 @@
 #!/usr/bin/env ruby
 
 require 'tot'
+
+Tot::CLI.start

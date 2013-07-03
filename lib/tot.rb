@@ -110,8 +110,17 @@ module Tot
 
   class CLI < Thor
     desc 'list' , 'list up your todo'
+    method_option :tag, :type => :array
     def list
-      TodoManager.listup.each_with_index do |todo| 
+      TodoManager.listup(:date)
+      .keep_if do |todo| 
+        unless options[:tag].nil?
+          todo['tag'].any?{|i| options[:tag].include? i } 
+        else
+          true
+        end
+      end
+      .each do |todo| 
         puts [todo['date'].strftime("%Y/%m/%d %H:%M"),todo['title']].join(' ')
       end
     end
@@ -141,5 +150,11 @@ module Tot
       TodoManager.dump_todo(todos)
     end
 
+    desc 'show TITLE', 'show the detail of a task. TITLE does not need to be complete.'
+    def show(title)
+      reg = Regexp.new(title)
+      
+    end
   end
 end
+

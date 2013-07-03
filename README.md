@@ -1,6 +1,6 @@
 # Tot
 
-TODO: Write a gem description
+Manage your todo on your terminal.
 
 ## Installation
 

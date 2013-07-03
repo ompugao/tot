@@ -134,6 +134,11 @@ module Tot
 
     desc 'delete', 'delete a task'
     def delete
+      todos = TodoManager.listup.each_with_index {|todo,idx| 
+        puts ["<<#{idx}>>",todo['date'].strftime("%Y/%m/%d %H:%M"),todo['title']].join(' ')
+      }
+      todos.delete_at(Readline.readline('Which Task?> ',false).chomp('\n').to_i)
+      TodoManager.dump_todo(todos)
     end
 
   end

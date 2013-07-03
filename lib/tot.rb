@@ -24,38 +24,69 @@ module Tot
     module_function :todo_path,:create
   end #}}}
 
-  module TodoManager #{{{
-    def load_todo
+  class TodoManager #{{{
+    include Enumerable
+    def initialize
+      load_file
+    end
+    def load_file
       todo_path = Config.todo_path
       File.open(todo_path,'w'){|file| YAML.dump([],file)} unless File.exists? todo_path
-      YAML.load_file(todo_path)
+      @tasks = YAML.load_file(todo_path)
     end
 
-    def dump_todo todos
+    def dump
       #File.open(Config.todo_path,'w'){|file| file.puts todos.ya2yaml} #YAML.dump(todos, file)}
       # ya2yamlだとhashの順番が変わる
-      File.open(Config.todo_path,'w'){|file| YAML.dump(todos, file)}
+      File.open(Config.todo_path,'w'){|file| YAML.dump(@tasks, file)}
     end
 
-    def listup(option = :date,&block)
-      todo = load_todo
-      case option
-      when :date
-        todo.sort_by{|i| i['date']}
-      when :date_reverse
-        todo.sort_by{|i| i['date']}.reverse
-      else
-        todo
+    def each
+      @tasks = load_file.sort_by{|i| i['date']}
+      @tasks.each do |todo|
+        yield todo
       end
+      self
     end
 
-    def add_todo(new_todo)
-      todo = load_todo
-      todo.push new_todo
-      dump_todo todo
+    def add(new_todo)
+      @tasks = load_file
+      @tasks.push new_todo
+      dump
     end
     
-    module_function :load_todo, :dump_todo, :listup, :add_todo
+    def delete(at)
+      @tasks = load_file
+      @tasks.delete_at(at)
+      dump
+    end
+
+    def delete_at(at)
+      @tasks.delete_at at
+    end
+    def print_color(with_index = false) #{{{
+      @tasks.each_with_index do |todo,idx|
+        #https://github.com/flori/term-ansicolor/blob/master/examples/example.rb
+        case (Date.parse(todo['date'].to_s) - Date.parse(Time.now.to_s)).to_i
+        when -10 .. -1
+          print Term::ANSIColor.cyan
+        when 0..1
+          print Term::ANSIColor.bold, Term::ANSIColor.red
+        when 2..3
+          print Term::ANSIColor.yellow
+        else
+          print Term::ANSIColor.white
+        end
+
+        puts [("<<#{idx}>>" if with_index),
+              todo['date'].strftime("%Y/%m/%d %H:%M"),
+              todo['title'],
+              ['[',todo['tag'],']'].flatten.join(' ')].join(' ') 
+        print Term::ANSIColor.reset
+      end
+      self
+    end #}}}
+    #module_function :load_file, :dump, :listup, :add
   end #}}}
 
   module Utils #{{{
@@ -110,46 +141,25 @@ module Tot
       ret
     end #}}}
 
-    def print_todos(todos, with_index = false) #{{{
-      todos.each_with_index do |todo,idx|
-        #https://github.com/flori/term-ansicolor/blob/master/examples/example.rb
-        case (Date.parse(todo['date'].to_s) - Date.parse(Time.now.to_s)).to_i
-        when -10 .. -1
-          print Term::ANSIColor.cyan
-        when 0..1
-          print Term::ANSIColor.bold, Term::ANSIColor.red
-        when 2..3
-          print Term::ANSIColor.yellow
-        else
-          print Term::ANSIColor.white
-        end
-
-        puts [("<<#{idx}>>" if with_index),
-              todo['date'].strftime("%Y/%m/%d %H:%M"),
-              todo['title'],
-              ['[',todo['tag'],']'].flatten.join(' ')].join(' ') 
-        print Term::ANSIColor.reset
-      end
-      todos
-    end #}}}
-    module_function :datetime_filter, :print_todos
+    module_function :datetime_filter
   end #}}}
 
   class CLI < Thor
+    def initialize(*args)
+      super
+      @todo_manager = TodoManager.new
+    end
+
     desc 'list' , 'list up your todo'
     method_option :tag, :type => :array
     def list
-      Utils.print_todos(
-        TodoManager.listup(:date)
-        .keep_if do |todo| 
-          unless options[:tag].nil?
-            #todo['tag'].any?{|i| options[:tag].include? i } 
-            options[:tag].all?{|i| todo['tag'].include? i}
-          else
-            true
-          end
+      @todo_manager.each do |todo|
+        unless options[:tag].nil?
+          options[:tag].all?{|i| todo['tag'].include? i}
+        else
+          true
         end
-      )
+      end.print_color(false)
     end
 
     desc 'add' , 'add a task'
@@ -166,15 +176,14 @@ module Tot
       system([ENV['EDITOR'],tmpfile].join(' '))
       new_todo['text'] = File.readlines(tmpfile).join
       print new_todo['text']
-      TodoManager.add_todo new_todo
+      @todo_manager.add new_todo
     end
 
     desc 'delete', 'delete a task'
     def delete
-      todos = TodoManager.listup
-      Utils.print_todos(todos, true)
-      todos.delete_at(Readline.readline('Which Task?> ',false).chomp('\n').to_i)
-      TodoManager.dump_todo(todos)
+      @todo_manager.print_color(true)
+      @todo_manager.delete_at Readline.readline('Which Task?> ',false).chomp('\n').to_i
+      @todo_manager.dump
     end
 
     desc 'show TITLE', <<-EOF
@@ -183,7 +192,7 @@ TITLE does not need to be complete.
 EOF
     def show(title)
       reg = Regexp.new(title,Regexp::IGNORECASE)
-      todos = TodoManager.listup.keep_if{|item| reg.match(item['title'])}
+      todos = @todo_manager.find_all{|item| reg.match(item['title'])}
       if todos.size == 0
         puts 'No matched task.'
       elsif todos.size > 1
@@ -195,6 +204,12 @@ EOF
         puts
         print todo['text']
       end
+      
+    end
+
+    desc 'edit TITLE', 'edit a task'
+    method_options :text => :boolean, :title => :boolean, :date => :title
+    def edit
       
     end
   end

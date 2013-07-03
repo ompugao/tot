@@ -117,13 +117,16 @@ module Tot
       TodoManager.listup(:date)
       .keep_if do |todo| 
         unless options[:tag].nil?
-          todo['tag'].any?{|i| options[:tag].include? i } 
+          #todo['tag'].any?{|i| options[:tag].include? i } 
+          options[:tag].all?{|i| todo['tag'].include? i}
         else
           true
         end
       end
       .each do |todo| 
-        puts [todo['date'].strftime("%Y/%m/%d %H:%M"),todo['title']].join(' ')
+        puts [todo['date'].strftime("%Y/%m/%d %H:%M"),
+              todo['title'],
+              ['[',todo['tag'],']'].flatten.join(' ')].join(' ')
       end
     end
 

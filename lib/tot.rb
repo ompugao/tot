@@ -36,7 +36,7 @@ module Tot
       File.open(Config.todo_path,'w'){|file| YAML.dump(todos, file)}
     end
 
-    def listup(option = :date_reverse,&block)
+    def listup(option = :date,&block)
       todo = load_todo
       case option
       when :date
@@ -111,7 +111,9 @@ module Tot
   class CLI < Thor
     desc 'list' , 'list up your todo'
     def list
-      puts TodoManager.listup
+      TodoManager.listup.each_with_index do |todo| 
+        puts [todo['date'].strftime("%Y/%m/%d %H:%M"),todo['title']].join(' ')
+      end
     end
 
     desc 'add' , 'add a task'
@@ -128,6 +130,10 @@ module Tot
       system([ENV['EDITOR'],tmpfile].join(' '))
       new_todo['text'] = File.readlines(tmpfile).join
       TodoManager.add_todo new_todo
+    end
+
+    desc 'delete', 'delete a task'
+    def delete
     end
 
   end

@@ -5,6 +5,7 @@ require "readline"
 require "fileutils"
 require "yaml"
 require "time"
+require "term/ansicolor"
 
 module Tot
   module Config #{{{
@@ -53,6 +54,7 @@ module Tot
       todo.push new_todo
       dump_todo todo
     end
+    
     module_function :load_todo, :dump_todo, :listup, :add_todo
   end #}}}
 
@@ -107,27 +109,47 @@ module Tot
       end
       ret
     end #}}}
-    module_function :datetime_filter
+
+    def print_todos(todos, with_index = false) #{{{
+      todos.each_with_index do |todo,idx|
+        #https://github.com/flori/term-ansicolor/blob/master/examples/example.rb
+        case (Date.parse(todo['date'].to_s) - Date.parse(Time.now.to_s)).to_i
+        when -10 .. -1
+          print Term::ANSIColor.cyan
+        when 0..1
+          print Term::ANSIColor.bold, Term::ANSIColor.red
+        when 2..3
+          print Term::ANSIColor.yellow
+        else
+          print Term::ANSIColor.white
+        end
+
+        puts [("<<#{idx}>>" if with_index),
+              todo['date'].strftime("%Y/%m/%d %H:%M"),
+              todo['title'],
+              ['[',todo['tag'],']'].flatten.join(' ')].join(' ') 
+        print Term::ANSIColor.reset
+      end
+      todos
+    end #}}}
+    module_function :datetime_filter, :print_todos
   end #}}}
 
   class CLI < Thor
     desc 'list' , 'list up your todo'
     method_option :tag, :type => :array
     def list
-      TodoManager.listup(:date)
-      .keep_if do |todo| 
-        unless options[:tag].nil?
-          #todo['tag'].any?{|i| options[:tag].include? i } 
-          options[:tag].all?{|i| todo['tag'].include? i}
-        else
-          true
+      Utils.print_todos(
+        TodoManager.listup(:date)
+        .keep_if do |todo| 
+          unless options[:tag].nil?
+            #todo['tag'].any?{|i| options[:tag].include? i } 
+            options[:tag].all?{|i| todo['tag'].include? i}
+          else
+            true
+          end
         end
-      end
-      .each do |todo| 
-        puts [todo['date'].strftime("%Y/%m/%d %H:%M"),
-              todo['title'],
-              ['[',todo['tag'],']'].flatten.join(' ')].join(' ')
-      end
+      )
     end
 
     desc 'add' , 'add a task'
@@ -149,9 +171,8 @@ module Tot
 
     desc 'delete', 'delete a task'
     def delete
-      todos = TodoManager.listup.each_with_index {|todo,idx| 
-        puts ["<<#{idx}>>",todo['date'].strftime("%Y/%m/%d %H:%M"),todo['title']].join(' ')
-      }
+      todos = TodoManager.listup
+      Utils.print_todos(todos, true)
       todos.delete_at(Readline.readline('Which Task?> ',false).chomp('\n').to_i)
       TodoManager.dump_todo(todos)
     end

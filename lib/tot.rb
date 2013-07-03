@@ -155,7 +155,7 @@ show the detail of a task.
 TITLE does not need to be complete.
 EOF
     def show(title)
-      reg = Regexp.new(title)
+      reg = Regexp.new(title,Regexp::IGNORECASE)
       todos = TodoManager.listup.keep_if{|item| reg.match(item['title'])}
       if todos.size == 0
         puts 'No matched task.'

@@ -150,9 +150,24 @@ module Tot
       TodoManager.dump_todo(todos)
     end
 
-    desc 'show TITLE', 'show the detail of a task. TITLE does not need to be complete.'
+    desc 'show TITLE', <<-EOF
+show the detail of a task.
+TITLE does not need to be complete.
+EOF
     def show(title)
       reg = Regexp.new(title)
+      todos = TodoManager.listup.keep_if{|item| reg.match(item['title'])}
+      if todos.size == 0
+        puts 'No matched task.'
+      elsif todos.size > 1
+        puts 'Several tasks matched.'
+      else
+        todo = todos[0]
+        puts 'Title: ' + todo['title']
+        puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
+        puts
+        print todo['text']
+      end
       
     end
   end

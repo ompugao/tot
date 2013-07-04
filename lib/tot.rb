@@ -6,6 +6,8 @@ require "fileutils"
 require "yaml"
 require "time"
 require "term/ansicolor"
+require "tempfile"
+require 'shellwords'
 
 module Tot
   module Config #{{{
@@ -50,10 +52,6 @@ module Tot
       @tasks.push new_todo
     end
     
-    def delete(at)
-      @tasks.delete_at(at)
-    end
-
     def each
       @tasks = load_file
       @tasks.each do |todo|
@@ -64,6 +62,11 @@ module Tot
 
     def delete_at(at)
       @tasks.delete_at at
+    end
+
+    def delete_by_title(title)
+      @tasks.delete_at(@tasks.find_index{|obj| obj['title'] == title})
+      @tasks
     end
 
     def find_all!(&block)
@@ -86,11 +89,29 @@ module Tot
         puts [("<<#{idx}>>" if with_index),
               todo['date'].strftime("%Y/%m/%d %H:%M"),
               todo['title'],
-              ['[',todo['tag'],']'].flatten.join(' ')].join(' ') 
+              '['+todo['tag'].flatten.join(',')+']'].keep_if{|i| not i.nil?}.join(' | ')
         print Term::ANSIColor.reset
       end
       self
     end #}}}
+
+    # This method is incomplete, returns array of title for now.
+    def stdin_parser(lines) #{{{
+      lines = lines.split(/\n/) unless lines.class == Array
+      lines.map {|line|
+        line.chomp.gsub(/\e\[\d+m/,"").split('|').map(&:strip)
+      }.keep_if{|i| i != []}
+      .map {|l| 
+        task = {}
+        task[:date] = Time.parse(l[0])
+        task[:title] = l[1]
+        task[:tag] = YAML.load(l[2])
+        task
+      }
+#    rescue
+#      raise RuntimeError, 'Incoming lines from stdin is invalid.'
+    end #}}}
+
     #module_function :load_file, :dump, :listup, :add
   end #}}}
 
@@ -146,13 +167,24 @@ module Tot
       ret
     end #}}}
 
-    module_function :datetime_filter
+    def stdin_incoming? #{{{
+      (File.pipe?(STDIN) || File.select([STDIN], [], [], 0) != nil)
+    end #}}}
+
+    module_function :datetime_filter,:stdin_incoming?
   end #}}}
 
   class CLI < Thor
+    TTY = open("/dev/tty")
     def initialize(*args)
       super
       @todo_manager = TodoManager.new
+      @stdin_tasks = []
+      # The following lines needs to be fixed when I correct stdin_parser.
+      if Utils.stdin_incoming?
+        @stdin_lines = STDIN.readlines
+        @stdin_tasks = @todo_manager.stdin_parser(@stdin_lines)
+      end
     end
 
     desc 'list' , 'list up your todo' #{{{
@@ -177,27 +209,41 @@ module Tot
     desc 'add' , 'add a task' #{{{
     def add
       new_todo = {}
-      new_todo['title'] = Readline.readline('title> ', true).chomp('\n')
+      new_todo['title'] = Readline.readline('title> ', true).chomp('\n').strip
       new_todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
       new_todo['tag'] = Readline.readline('tag (separate by space)> ', true)
                           .chomp('\n').split(' ')
-      tmpfile = "/tmp/tot.markdown"
       # File.open(tmpfile,"w"){|file|
       #   file.puts "\n\n# This line will be ignored."
       # }
-      system([ENV['EDITOR'],tmpfile].join(' '))
-      new_todo['text'] = File.readlines(tmpfile).join
+
+      #tmpfile = "/tmp/tot.markdown"
+      #system([ENV['EDITOR'],tmpfile].join(' '))
+      Tempfile.open(["tot_" + Shellwords.shellescape(new_todo['title']), ".markdown"]) do |t|
+        IO.copy_stream(STDIN, t) unless STDIN.tty?
+        STDIN.reopen(TTY)
+        system([ENV['EDITOR'], t.path, ">", TTY.path].join(" "))
+        new_todo['text'] = t.read
+      end
+      #new_todo['text'] = File.readlines(tmpfile).join
       print new_todo['text']
-      File.delete tmpfile
+      #File.delete tmpfile
       @todo_manager.add new_todo
       @todo_manager.save
     end #}}}
 
     desc 'delete', 'delete a task' #{{{
     def delete
-      @todo_manager.print_color(true)
-      @todo_manager.delete_at Readline.readline('Which Task?> ',false).chomp('\n').to_i
-      @todo_manager.save
+      if @stdin_tasks.empty?
+        @todo_manager.print_color(true)
+        @todo_manager.delete_at Readline.readline('Which Task?> ',false).chomp('\n').to_i
+        @todo_manager.save
+      elsif #@stdin_tasks.size >= 1
+        @stdin_tasks.each do |stdin_task|
+          @todo_manager.delete_by_title(stdin_task[:title])
+        end
+        @todo_manager.save
+      end
     end #}}}
 
     desc 'show', <<-EOF #{{{
@@ -206,12 +252,25 @@ TITLE does not need to be complete.
 EOF
     method_option :filter, :type => :array, :aliases => "-f",:default => nil
     def show
+
+      #### stdinあり
+      if Utils.stdin_incoming?
+        todos = []
+        @stdin_tasks.each do |stdin_task|
+          todos.push @todo_manager.find_all!{|item| stdin_task[:title].match(item['title'])}
+        end
+        todos.flatten.each { |todo| puts '-'*30;print_todo(todo)}
+        return
+      end
+
+      #### stdinなし
       reg = nil
       if options['filter']
         reg = Regexp.new(options['filter'].join('.*'),Regexp::IGNORECASE)
       else
         reg = /.*/
       end
+
       todo = nil
       todos = @todo_manager.find_all!{|item| reg.match(item['title'])}
       if todos.size == 0
@@ -223,17 +282,25 @@ EOF
       else
         todo = todos.first
       end
-      puts 'Title: ' + todo['title']
-      puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
-      puts
-      print todo['text']
-      
+
+      print_todo(todo)
     end #}}}
 
     desc 'edit', 'edit a task' #{{{
     method_options :text => :boolean, :title => :boolean, :date => :boolean, :tag => :boolean
     method_option :filter, :type => :array, :aliases => "-f",:default => nil
     def edit
+      #### stdinあり
+      if Utils.stdin_incoming?
+        todos = []
+        @stdin_tasks.each do |stdin_task|
+          todos.push @todo_manager.find_all!{|item| stdin_task[:title] == item['title']}
+        end
+        todos.flatten.each { |todo| edit_todo(todo,options)}
+        return
+      end
+
+      #### stdinなし
       reg = nil
       if options['filter']
         reg = Regexp.new(options['filter'].join('.*'),Regexp::IGNORECASE)
@@ -251,32 +318,49 @@ EOF
       else
         todo = todos.first
       end
-
-      old_title = todo['title']
-      if options['title']
-        todo['title'] = Readline.readline('New Title> ').chomp('\n')
-      elsif options['date']
-        todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
-      elsif options['tag']
-        todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
-        .chomp('\n').split(' ')
-      else
-        tmpfile = "/tmp/tot.markdown"
-        File.open(tmpfile,'w'){|file| file.write todo['text']}
-        system([ENV['EDITOR'],tmpfile].join(' '))
-        todo['text'] = File.readlines(tmpfile).join
-        File.delete tmpfile
-      end
-
-      puts 'Title: ' + todo['title']
-      puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
-      puts 'Tags:  ' + todo['tag'].to_s
-      puts
-      print todo['text']
-      @todo_manager.delete_at(@todo_manager.find_index{|obj| obj['title'] == old_title})
-      @todo_manager.add todo
-      @todo_manager.save
+      
+      edit_todo(todo,options)
     end #}}}
 
+    no_commands do #{{{
+      def edit_todo(todo,options)
+        old_title = todo['title']
+        if options['title']
+          todo['title'] = Readline.readline('New Title> ').chomp('\n')
+        elsif options['date']
+          todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+        elsif options['tag']
+          todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
+          .chomp('\n').split(' ')
+        else
+          tmpfile = "tot_" + Shellwords.shellescape(todo['title']) + ".markdown"
+
+          fileio = File.open(tmpfile,'w')
+          fileio.write todo['text']
+          STDIN.reopen(TTY)
+          system([ENV['EDITOR'], tmpfile, ">", TTY.path].join(" "))
+          fileio.flush
+          todo['text'] = File.readlines(tmpfile).join
+          puts todo
+
+          fileio.close
+          File.delete tmpfile
+        end
+
+        @todo_manager.refresh
+        @todo_manager.delete_by_title(old_title)
+        @todo_manager.add todo
+        @todo_manager.save
+      end
+    end #}}}
+
+    no_commands do #{{{
+      def print_todo(todo)
+        puts 'Title: ' + todo['title']
+        puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
+        puts
+        print todo['text']
+      end
+    end #}}}
   end
 end

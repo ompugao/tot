@@ -35,7 +35,12 @@ module Tot
       @tasks = YAML.load_file(todo_path).sort_by{|i| i['date']}
     end
 
-    def dump
+    def refresh
+      load_file
+      self
+    end
+
+    def save
       #File.open(Config.todo_path,'w'){|file| file.puts todos.ya2yaml} #YAML.dump(todos, file)}
       # ya2yamlだとhashの順番が変わる
       File.open(Config.todo_path,'w'){|file| YAML.dump(@tasks, file)}
@@ -43,13 +48,10 @@ module Tot
 
     def add(new_todo)
       @tasks.push new_todo
-      dump
     end
     
     def delete(at)
-      @tasks = load_file
       @tasks.delete_at(at)
-      dump
     end
 
     def each
@@ -153,18 +155,26 @@ module Tot
       @todo_manager = TodoManager.new
     end
 
-    desc 'list' , 'list up your todo'
-    method_option :tag, :type => :array
+    desc 'list' , 'list up your todo' #{{{
+    method_option :tag, :type => :array, :aliases => "-t"
+    method_option :filter, :type => :array, :aliases => "-f"
     def list
       if options['tag']
         @todo_manager.find_all! do |todo|
           options[:tag].all?{|i| todo['tag'].include? i}
         end
+      elsif options['filter']
+        @todo_manager.find_all! do |todo|
+           options['filter'].all?{|i|
+             re = Regexp.new(i,Regexp::IGNORECASE)
+             re.match(todo['title'])
+           }
+        end
       end
       @todo_manager.print_color(false)
-    end
+    end #}}}
 
-    desc 'add' , 'add a task'
+    desc 'add' , 'add a task' #{{{
     def add
       new_todo = {}
       new_todo['title'] = Readline.readline('title> ', true).chomp('\n')
@@ -180,73 +190,93 @@ module Tot
       print new_todo['text']
       File.delete tmpfile
       @todo_manager.add new_todo
-    end
+      @todo_manager.save
+    end #}}}
 
-    desc 'delete', 'delete a task'
+    desc 'delete', 'delete a task' #{{{
     def delete
       @todo_manager.print_color(true)
       @todo_manager.delete_at Readline.readline('Which Task?> ',false).chomp('\n').to_i
-      @todo_manager.dump
-    end
+      @todo_manager.save
+    end #}}}
 
-    desc 'show TITLE', <<-EOF
+    desc 'show', <<-EOF #{{{
 show the detail of a task.
 TITLE does not need to be complete.
 EOF
-    def show(title)
-      reg = Regexp.new(title,Regexp::IGNORECASE)
-      todos = @todo_manager.find_all{|item| reg.match(item['title'])}
+    method_option :filter, :type => :array, :aliases => "-f",:default => nil
+    def show
+      reg = nil
+      if options['filter']
+        reg = Regexp.new(options['filter'].join('.*'),Regexp::IGNORECASE)
+      else
+        reg = /.*/
+      end
+      todo = nil
+      todos = @todo_manager.find_all!{|item| reg.match(item['title'])}
       if todos.size == 0
         puts 'No matched task.'
+        return
       elsif todos.size > 1
-        puts 'Several tasks matched.'
+        @todo_manager.print_color(true)
+        todo = todos[Readline.readline('Which Task?> ',false).chomp('\n').to_i]
       else
-        todo = todos[0]
-        puts 'Title: ' + todo['title']
-        puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
-        puts
-        print todo['text']
+        todo = todos.first
       end
+      puts 'Title: ' + todo['title']
+      puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
+      puts
+      print todo['text']
       
-    end
+    end #}}}
 
-    desc 'edit TITLE', 'edit a task'
+    desc 'edit', 'edit a task' #{{{
     method_options :text => :boolean, :title => :boolean, :date => :boolean, :tag => :boolean
-    def edit(title)
-      reg = Regexp.new(title,Regexp::IGNORECASE)
-      todos = @todo_manager.find_all{|item| reg.match(item['title'])}
+    method_option :filter, :type => :array, :aliases => "-f",:default => nil
+    def edit
+      reg = nil
+      if options['filter']
+        reg = Regexp.new(options['filter'].join('.*'),Regexp::IGNORECASE)
+      else
+        reg = /.*/
+      end
+      todo = nil
+      todos = @todo_manager.find_all!{|item| reg.match(item['title'])}
       if todos.size == 0
         puts 'No matched task.'
+        return
       elsif todos.size > 1
-        puts todos.size.to_s + ' tasks matched.'
+        @todo_manager.print_color(true)
+        todo = todos[Readline.readline('Which Task?> ',false).chomp('\n').to_i]
       else
-        todo = todos[0]
-        old_title = todo['title']
-        if options['title']
-          todo['title'] = Readline.readline('New Title> ').chomp('\n')
-        elsif options['date']
-          todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
-        elsif options['tag']
-          todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
-                          .chomp('\n').split(' ')
-        else
-          tmpfile = "/tmp/tot.markdown"
-          File.open(tmpfile,'w'){|file| file.write todo['text']}
-          system([ENV['EDITOR'],tmpfile].join(' '))
-          todo['text'] = File.readlines(tmpfile).join
-          File.delete tmpfile
-        end
-
-        puts 'Title: ' + todo['title']
-        puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
-        puts 'Tags:  ' + todo['tag'].to_s
-        puts
-        print todo['text']
-        @todo_manager.delete_at(@todo_manager.find_index{|obj| obj['title'] == old_title})
-        @todo_manager.add todo
+        todo = todos.first
       end
-      
-    end
+
+      old_title = todo['title']
+      if options['title']
+        todo['title'] = Readline.readline('New Title> ').chomp('\n')
+      elsif options['date']
+        todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+      elsif options['tag']
+        todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
+        .chomp('\n').split(' ')
+      else
+        tmpfile = "/tmp/tot.markdown"
+        File.open(tmpfile,'w'){|file| file.write todo['text']}
+        system([ENV['EDITOR'],tmpfile].join(' '))
+        todo['text'] = File.readlines(tmpfile).join
+        File.delete tmpfile
+      end
+
+      puts 'Title: ' + todo['title']
+      puts 'Date:  ' + todo['date'].strftime("%Y/%m/%d %H:%M")
+      puts 'Tags:  ' + todo['tag'].to_s
+      puts
+      print todo['text']
+      @todo_manager.delete_at(@todo_manager.find_index{|obj| obj['title'] == old_title})
+      @todo_manager.add todo
+      @todo_manager.save
+    end #}}}
+
   end
 end
-

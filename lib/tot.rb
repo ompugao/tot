@@ -212,7 +212,12 @@ module Tot
     def add
       new_todo = {}
       new_todo['title'] = Readline.readline('title> ', true).chomp('\n').strip
-      new_todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+      begin
+          new_todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+      rescue
+          puts "Invalid input. Please retry."
+          retry
+      end
       new_todo['tag'] = Readline.readline('tag (separate by space)> ', true)
                           .chomp('\n').split(' ')
       # File.open(tmpfile,"w"){|file|

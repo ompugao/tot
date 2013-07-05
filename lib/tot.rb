@@ -226,7 +226,7 @@ module Tot
 
       #tmpfile = "/tmp/tot.markdown"
       #system([ENV['EDITOR'],tmpfile].join(' '))
-      Tempfile.open("/tmp/tot_",".markdown") do |t|
+      Tempfile.open(["/tmp/tot_",".markdown"]) do |t|
         IO.copy_stream(STDIN, t) unless STDIN.tty?
         STDIN.reopen(TTY)
         system([ENV['EDITOR'], t.path, ">", TTY.path].join(" "))

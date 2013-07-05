@@ -350,7 +350,7 @@ EOF
           STDIN.reopen(TTY)
           system([ENV['EDITOR'], tmpfile, ">", TTY.path].join(" "))
           todo['text'] = File.readlines(tmpfile).join
-          puts todo
+          print_todo(todo)
 
           File.delete tmpfile
         end

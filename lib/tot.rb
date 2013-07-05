@@ -81,9 +81,11 @@ module Tot
         when 0..1
           print Term::ANSIColor.bold, Term::ANSIColor.red
         when 2..3
-          print Term::ANSIColor.yellow
+          print Term::ANSIColor.bold, Term::ANSIColor.yellow
+        when 4..7
+          print Term::ANSIColor.bold, Term::ANSIColor.magenta
         else
-          print Term::ANSIColor.white
+          print Term::ANSIColor.green
         end
 
         puts [("<<#{idx}>>" if with_index),
@@ -108,8 +110,8 @@ module Tot
         task[:tag] = YAML.load(l[2])
         task
       }
-#    rescue
-#      raise RuntimeError, 'Incoming lines from stdin is invalid.'
+    rescue
+      raise RuntimeError, 'Stdin lines are invalid.'
     end #}}}
 
     #module_function :load_file, :dump, :listup, :add
@@ -219,7 +221,7 @@ module Tot
 
       #tmpfile = "/tmp/tot.markdown"
       #system([ENV['EDITOR'],tmpfile].join(' '))
-      Tempfile.open(["tot_" + Shellwords.shellescape(new_todo['title']), ".markdown"]) do |t|
+      Tempfile.open("/tmp/tot_",".markdown") do |t|
         IO.copy_stream(STDIN, t) unless STDIN.tty?
         STDIN.reopen(TTY)
         system([ENV['EDITOR'], t.path, ">", TTY.path].join(" "))
@@ -323,7 +325,7 @@ EOF
     end #}}}
 
     no_commands do #{{{
-      def edit_todo(todo,options)
+      def edit_todo(todo,options={})
         old_title = todo['title']
         if options['title']
           todo['title'] = Readline.readline('New Title> ').chomp('\n')
@@ -333,17 +335,18 @@ EOF
           todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
           .chomp('\n').split(' ')
         else
-          tmpfile = "tot_" + Shellwords.shellescape(todo['title']) + ".markdown"
+          #tmpfile = "/tmp/tot_" + Shellwords.shellescape(todo['title']) + ".markdown"
+          tmpfile = "/tmp/tot.markdown"
 
           fileio = File.open(tmpfile,'w')
           fileio.write todo['text']
+          fileio.flush
+          fileio.close
           STDIN.reopen(TTY)
           system([ENV['EDITOR'], tmpfile, ">", TTY.path].join(" "))
-          fileio.flush
           todo['text'] = File.readlines(tmpfile).join
           puts todo
 
-          fileio.close
           File.delete tmpfile
         end
 

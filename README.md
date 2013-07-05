@@ -1,4 +1,4 @@
-# Tot
+# ToT
 
 Manage your todo on your terminal, inspired by [console-task-checker](https://github.com/alice1017/console-task-checker).
 

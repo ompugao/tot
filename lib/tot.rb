@@ -335,7 +335,12 @@ EOF
         if options['title']
           todo['title'] = Readline.readline('New Title> ').chomp('\n')
         elsif options['date']
-          todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+          begin
+            todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+          rescue
+            puts 'Invalid input. Please retry.'
+            retry
+          end
         elsif options['tag']
           todo['tag'] = Readline.readline("tag (old_value: #{todo['tag'].join(' ')})> ", true)
           .chomp('\n').split(' ')

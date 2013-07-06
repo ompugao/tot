@@ -243,7 +243,11 @@ module Tot
     def delete
       if @stdin_tasks.empty?
         @todo_manager.print_color(true)
-        @todo_manager.delete_at Readline.readline('Which Task?> ',false).chomp('\n').to_i
+        begin
+          @todo_manager.delete_at Integer(Readline.readline('Which Task?> ',false).chomp('\n'))
+        rescue
+          raise RuntimeError, 'Invalid input. Please retry.'
+        end
         @todo_manager.save
       elsif #@stdin_tasks.size >= 1
         @stdin_tasks.each do |stdin_task|

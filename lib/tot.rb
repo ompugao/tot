@@ -326,7 +326,7 @@ EOF
         return
       elsif todos.size > 1
         @todo_manager.print_color(true)
-        todo = todos[Readline.readline('Which Task?> ',false).chomp('\n').to_i]
+        todo = todos[Integer(Readline.readline('Which Task?> ',false).chomp('\n'))]
       else
         todo = todos.first
       end

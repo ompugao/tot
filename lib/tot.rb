@@ -246,7 +246,8 @@ module Tot
         begin
           @todo_manager.delete_at Integer(Readline.readline('Which Task?> ',false).chomp('\n'))
         rescue
-          raise RuntimeError, 'Invalid input. Please retry.'
+          puts 'Invalid input. Please retry.'
+          retry
         end
         @todo_manager.save
       elsif #@stdin_tasks.size >= 1

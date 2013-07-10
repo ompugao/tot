@@ -360,9 +360,12 @@ EOF
           todo['title'] = Readline.readline('New Title> ').chomp('\n')
         elsif options['date']
           begin
-            todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+            input = Readline.readline('date> ', true).chomp('\n').strip.split
+            date = Utils.datetime_filter(input[0])
+            h,m  = Utils.time_filter(input[1])
+            todo['date'] = Time.mktime(date.year, date.month, date.day, h, m)
           rescue
-            puts 'Invalid input. Please retry.'
+            puts "Invalid input. Please retry."
             retry
           end
         elsif options['tag']

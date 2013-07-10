@@ -169,11 +169,27 @@ module Tot
       ret
     end #}}}
 
+    def time_filter(buf) #{{{
+      ret = []
+      case buf
+      when /(\d+):(\d+)/, /(\d+)時(\d+)分/, /(\d+)じ(\d+)ふん/
+        ret[0] = $1.to_i
+        ret[1] = $2.to_i
+      when /(\d+)時/
+        ret[0] = $1.to_i
+        ret[1] = 0
+      default
+        ret[0] = 0
+        ret[1] = 0
+      end
+      ret
+    end #}}}
+
     def stdin_incoming? #{{{
       (File.pipe?(STDIN) || File.select([STDIN], [], [], 0) != nil)
     end #}}}
 
-    module_function :datetime_filter,:stdin_incoming?
+    module_function :datetime_filter,:time_filter,:stdin_incoming?
   end #}}}
 
   class CLI < Thor
@@ -213,10 +229,13 @@ module Tot
       new_todo = {}
       new_todo['title'] = Readline.readline('title> ', true).chomp('\n').strip
       begin
-          new_todo['date'] = Time.parse(Utils.datetime_filter(Readline.readline('date> ', true).chomp('\n')).to_s)
+        input = Readline.readline('date> ', true).chomp('\n').strip.split
+        date = Utils.datetime_filter(input[0])
+        h,m  = Utils.time_filter(input[1])
+        new_todo['date'] = Time.mktime(date.year, date.month, date.day, h, m)
       rescue
-          puts "Invalid input. Please retry."
-          retry
+        puts "Invalid input. Please retry."
+        retry
       end
       new_todo['tag'] = Readline.readline('tag (separate by space)> ', true)
                           .chomp('\n').split(' ')

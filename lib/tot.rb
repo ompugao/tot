@@ -77,15 +77,17 @@ module Tot
         #https://github.com/flori/term-ansicolor/blob/master/examples/example.rb
         case (Date.parse(todo['date'].to_s) - Date.parse(Time.now.to_s)).to_i
         when -10 .. -1
-          print Term::ANSIColor.cyan
+          print Term::ANSIColor.blue
         when 0..1
           print Term::ANSIColor.bold, Term::ANSIColor.red
         when 2..3
           print Term::ANSIColor.bold, Term::ANSIColor.yellow
         when 4..7
-          print Term::ANSIColor.bold, Term::ANSIColor.magenta
+          print Term::ANSIColor.dark, Term::ANSIColor.cyan
+        when 7..30
+          print Term::ANSIColor.white
         else
-          print Term::ANSIColor.green
+          print Term::ANSIColor.magenta
         end
 
         puts [("<<#{idx}>>" if with_index),

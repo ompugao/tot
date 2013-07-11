@@ -83,7 +83,7 @@ module Tot
         when 2..3
           print Term::ANSIColor.bold, Term::ANSIColor.yellow
         when 4..7
-          print Term::ANSIColor.dark, Term::ANSIColor.cyan
+          print Term::ANSIColor.bold, Term::ANSIColor.cyan
         when 7..30
           print Term::ANSIColor.white
         else
